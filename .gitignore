@@ -1,0 +1,5 @@
+__pycache__/
+*.egg-info/
+
+# Until I'm not convinced this is a bad idea
+poetry.lock
