@@ -2,7 +2,7 @@ from abc import ABC
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, Sized, Collection, List
 
 
 class Stop(Exception):
@@ -36,7 +36,7 @@ class PipelineContextEntity(DictLike):
 class PipelineContext(DictLike):
 
     can_continue: bool = True
-    entities: List[PipelineContextEntity] = []
+    entities: Iterable[PipelineContextEntity] = []
     data: Dict
 
     def clone(self):
@@ -58,7 +58,7 @@ class AbstractPipelineStage(ABC):
         """
         Actual stage implementation.
         """
-        if ctx_old is None:
+        if ctx_old is None:  # in the initial stage, context is fully optional
             ctx_old = PipelineContext()
         try:
             return self.run(ctx_old.clone())
@@ -78,24 +78,44 @@ class AbstractPipelineStage(ABC):
 
 class CompoundPipelineStage(AbstractPipelineStage, ABC):
 
-    def __init__(self, one: AbstractPipelineStage, two: AbstractPipelineStage):
-        self.one = one
-        self.two = two
+    subpipelines: Collection[AbstractPipelineStage]
+
+    def __init__(self, *subpipelines: AbstractPipelineStage):
+        if len(subpipelines) < 2:
+            raise ValueError(f'{self.__class__.__name__} needs at least two inner pipelines.')
+        self.subpipelines = subpipelines
+        self.stage_iter = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.stage_iter > len(self.subpipelines):
+            raise StopIteration
+        stage = self.subpipelines[self.stage_iter]
+        self.stage_iter += 1
+        return stage
 
 
 class And(CompoundPipelineStage):
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
-        ctx_one = self.one(ctx)
+        ctx_one = next(self)(ctx)
         if ctx_one.can_continue:
-            return self.two(ctx_one)
+            return next(self)(ctx_one)
         return ctx_one
 
 
 class Or(CompoundPipelineStage):
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
-        ctx_one = self.one(ctx)
+        ctx_one = next(self)(ctx)
         if ctx_one.can_continue:
             return ctx_one
-        return self.two(ctx)
+        return next(self)(ctx)
+
+
+class Diverge(CompoundPipelineStage):
+
+    def run(self, ctx: PipelineContext) -> List[PipelineContext]:
+        return [pipeline(ctx) for pipeline in self.subpipelines]
