@@ -15,7 +15,29 @@ class FailingStage(AbstractPipelineStage):
         raise Stop
 
 
-def test_pipeline_can_be_completed_and_or():
+def test_pipeline_and():
+    """
+    Ensures that a pipeline can be completed when using a mixture of AND scenarios.
+    """
+    # In this case:
+    #   1. The first SuccessfulStage completes successfully and the pipeline continues
+    #   2. The FailingStage fails in FailingStage
+    #   3. The result of the pipeline is the output of the SuccessfulStage
+    pl = SuccessfulStage() & FailingStage()
+    final_context = pl()
+    assert final_context.data['successes'] == 1
+
+    # In this case:
+    #   1. The first SuccessfulStage completes successfully and the pipeline continues
+    #   2. The FailingStage fails in FailingStage
+    #   3. The second SuccessfulStage does not run
+    #   3. The result of the pipeline is the output of the first SuccessfulStage
+    pl = SuccessfulStage() & FailingStage() & SuccessfulStage()
+    final_context = pl()
+    assert final_context.data['successes'] == 1
+
+
+def test_pipeline_and_or():
     """
     Ensures that a pipeline can be completed when using a mixture of AND and OR.
 
